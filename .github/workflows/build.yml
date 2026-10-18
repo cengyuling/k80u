@@ -14,21 +14,22 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git build-essential flex bison libssl-dev libelf-dev cpio libarchive-tools clang lld llvm
+          # 加入 binutils，提供 GNU 版本的 ar 命令
+          sudo apt-get install -y git build-essential flex bison libssl-dev libelf-dev cpio libarchive-tools clang lld llvm binutils
 
       - name: Setup Swap Space (防内存溢出)
         run: |
-          # 1. 停用并删除 GitHub Actions 默认占用的 swap 文件，解决 Text file busy 报错
+          # 停用并删除 GitHub 默认的 swap
           sudo swapoff -a
           sudo rm -f /swapfile
 
-          # 2. 使用 dd 创建 4GB 的新 swap 文件
+          # 使用 dd 创建 4GB 的新 swap
           sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
           
-          # 3. 确认内存状态，你应该能看到 4.0Gi 的 Swap
+          # 确认内存和 Swap 状态
           free -h
 
       - name: Download Kernel Source (Klimt / MT6991)
@@ -42,7 +43,11 @@ jobs:
           # 生成基础配置
           make ARCH=arm64 LLVM=1 gki_defconfig
           
-          # 关闭导致崩溃和不需要的选项
+          # 1. 清理证书配置（这是导致 built-in.a 报错的常见“暗雷”）
+          scripts/config --file .config --disable CONFIG_SYSTEM_TRUSTED_KEYS
+          scripts/config --file .config --set-str CONFIG_SYSTEM_TRUSTED_KEYS ""
+          
+          # 2. 关闭不需要的复杂特性
           scripts/config --file .config --disable CONFIG_IKHEADERS
           scripts/config --file .config --disable CONFIG_MODULE_SIG
           scripts/config --file .config --disable CONFIG_LTO_CLANG_THIN
@@ -51,12 +56,13 @@ jobs:
           # 更新配置
           make ARCH=arm64 LLVM=1 olddefconfig
           
-          # 使用 -j2 (双线程) 进行编译，配合上面的 4G Swap，防止内存溢出
-          make ARCH=arm64 LLVM=1 -j2
+          # 3. 强制使用 GNU 原生 ar 工具，绕开 llvm-ar 的兼容性 Bug
+          # 4. 使用 -j2 双线程编译，防止并发过高
+          make ARCH=arm64 LLVM=1 AR=ar -j2
           
           cd ..
           # 编译我们的外部模块
-          make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
+          make ARCH=arm64 LLVM=1 AR=ar -C kernel_common M=$GITHUB_WORKSPACE modules
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
