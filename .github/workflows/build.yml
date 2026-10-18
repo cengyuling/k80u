@@ -1,13 +1,39 @@
-- name: Download Kernel Source
-  run: |
-    # 使用 klimt 的官方源码地址
-    git clone --depth=1 -b bsp-klimt-v-oss https://github.com/MiCode/MTK_kernel_device_modules kernel_common
+name: Build Kernel Module
 
-- name: Build Module
-  run: |
-    cd kernel_common
-    make ARCH=arm64 LLVM=1 gki_defconfig
-    # 完整编译内核，以生成准确的 Module.symvers
-    make ARCH=arm64 LLVM=1 -j$(nproc) 
-    cd ..
-    make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git build-essential clang llvm lld clang-tools make bc flex bison libssl-dev libelf-dev
+
+      - name: Download Kernel Source (Klimt / MT6991)
+        run: |
+          # 这里使用第三方整理的小米15T Pro完整源码树
+          git clone --depth=1 -b 17.0 https://github.com/iowaz/android_kernel_xiaomi_klimt kernel_common
+
+      - name: Build Module
+        run: |
+          cd kernel_common
+          # MTK 平台通常需要先指定 defconfig，具体名称需根据源码确定，这里先尝试 gki_defconfig
+          make ARCH=arm64 LLVM=1 gki_defconfig
+          # 完整编译内核，生成与 klimt 匹配的 Module.symvers 符号表
+          make ARCH=arm64 LLVM=1 -j$(nproc)
+          cd ..
+          # 带着符号表编译我们的超频模块
+          make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: overclock-ko
+          path: overclock.ko
