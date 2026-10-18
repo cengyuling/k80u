@@ -14,32 +14,38 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git build-essential clang llvm lld clang-tools binutils make bc flex bison libssl-dev libelf-dev cpio libarchive-tools
+          sudo apt-get install -y git build-essential flex bison libssl-dev libelf-dev cpio libarchive-tools wget
 
+      - name: Download AOSP Clang Toolchain
+        run: |
+          # 下载 Google 官方提供的 AOSP Clang 工具链
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r510928.tar.gz
+          mkdir aosp-clang
+          tar -xzf clang-r510928.tar.gz -C aosp-clang
+          
       - name: Download Kernel Source (Klimt / MT6991)
         run: |
           git clone --depth=1 -b 17.0 https://github.com/iowaz/android_kernel_xiaomi_klimt kernel_common
 
       - name: Build Module
         run: |
-          cd kernel_common
+          # 将刚刚下载的 AOSP Clang 加入环境变量，覆盖系统默认的 clang
+          export PATH=$GITHUB_WORKSPACE/aosp-clang/bin:$PATH
           
-          # 1. 初始化配置
+          cd kernel_common
           make ARCH=arm64 LLVM=1 gki_defconfig
           
-          # 2. 关闭容易导致 Action 环境崩溃的选项（禁用 kheaders 和 模块签名）
+          # 禁用导致之前崩溃的 kheaders 和模块签名
           scripts/config --file .config --disable CONFIG_IKHEADERS
           scripts/config --file .config --disable CONFIG_MODULE_SIG
           
-          # 3. 更新配置
           make ARCH=arm64 LLVM=1 olddefconfig
           
-          # 4. 完整编译内核，生成 Module.symvers
-          # 使用 V=1 输出详细日志，限制 -j4 防止内存溢出
-          make ARCH=arm64 LLVM=1 V=1 -j4
+          # 使用官方 Clang 编译内核，限制并发 -j4 防止内存溢出
+          make ARCH=arm64 LLVM=1 -j4
           
           cd ..
-          # 5. 编译我们的模块
+          # 编译我们的 overclock 模块
           make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
 
       - name: Upload Artifact
