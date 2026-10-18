@@ -14,7 +14,6 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # 核心修复：补充了 llvm 和 clang-tools 完整工具链
           sudo apt-get install -y git build-essential clang llvm lld clang-tools make bc flex bison libssl-dev libelf-dev
 
       - name: Download Kernel Source
@@ -24,10 +23,13 @@ jobs:
       - name: Build Module
         run: |
           cd kernel_common
-          # 显式指定 LLVM=1 确保使用 LLVM 工具链
           make ARCH=arm64 LLVM=1 gki_defconfig
-          make ARCH=arm64 LLVM=1 modules_prepare
+          # 关键修改：完整编译内核，生成 Module.symvers 符号表
+          # -j$(nproc) 开启多核并行编译以节省时间
+          make ARCH=arm64 LLVM=1 -j$(nproc)
+          
           cd ..
+          # 带着完整的符号表编译我们的 overclock 模块
           make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
 
       - name: Upload Artifact
