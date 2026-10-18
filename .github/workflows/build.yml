@@ -1,39 +1,13 @@
-name: Build Kernel Module
+- name: Download Kernel Source
+  run: |
+    # 使用 klimt 的官方源码地址
+    git clone --depth=1 -b bsp-klimt-v-oss https://github.com/MiCode/MTK_kernel_device_modules kernel_common
 
-on:
-  push:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git build-essential clang llvm lld clang-tools make bc flex bison libssl-dev libelf-dev
-
-      - name: Download Kernel Source
-        run: |
-          git clone --depth=1 -b android15-6.6 https://android.googlesource.com/kernel/common kernel_common
-
-      - name: Build Module
-        run: |
-          cd kernel_common
-          make ARCH=arm64 LLVM=1 gki_defconfig
-          # 关键修改：完整编译内核，生成 Module.symvers 符号表
-          # -j$(nproc) 开启多核并行编译以节省时间
-          make ARCH=arm64 LLVM=1 -j$(nproc)
-          
-          cd ..
-          # 带着完整的符号表编译我们的 overclock 模块
-          make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: overclock-ko
-          path: overclock.ko
+- name: Build Module
+  run: |
+    cd kernel_common
+    make ARCH=arm64 LLVM=1 gki_defconfig
+    # 完整编译内核，以生成准确的 Module.symvers
+    make ARCH=arm64 LLVM=1 -j$(nproc) 
+    cd ..
+    make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
