@@ -11,26 +11,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git build-essential clang lld make bc flex bison libssl-dev libelf-dev
-
-      - name: Download Kernel Source
-        run: |
-          git clone --depth=1 -b android15-6.6 https://android.googlesource.com/kernel/common kernel_common
-
-      - name: Build Module
-        run: |
-          cp Makefile overclock.c kernel_common/
-          cd kernel_common
-          sed -i 's|KDIR := /lib/modules/$(shell uname -r)/build|KDIR := $(PWD)|' Makefile
-          make ARCH=arm64 LLVM=1 arch/arm64/configs/gki_defconfig
-          make ARCH=arm64 LLVM=1 modules_prepare
-          make ARCH=arm64 LLVM=1 M=$PWD modules
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Build Module with GKI Action
+        uses: dabao1955/kernel_build_action@main
         with:
-          name: overclock-ko
-          path: kernel_common/overclock.ko
+          kernel-url: 'https://android.googlesource.com/kernel/common'
+          branch: 'android15-6.6'
+          config: 'gki_defconfig'
+          arch: 'arm64'
+          android-version: 15
+          extra-cmd: 'make LLVM=1 M=$GITHUB_WORKSPACE modules'
