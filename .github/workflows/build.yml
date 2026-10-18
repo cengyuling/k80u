@@ -1,4 +1,3 @@
-
 name: Build Kernel Module
 
 on:
@@ -26,15 +25,23 @@ jobs:
           cd kernel_common
           make ARCH=arm64 LLVM=1 gki_defconfig
           
-          # 禁用不需要的 kheaders 功能，防止 cpio 相关报错
+          # 关闭一切可能导致报错的非必要安全/调试配置
           scripts/config --file .config --disable CONFIG_IKHEADERS
+          scripts/config --file .config --disable CONFIG_MODULE_SIG
+          scripts/config --file .config --disable CONFIG_MODULE_SIG_ALL
+          scripts/config --file .config --disable CONFIG_MODULE_SIG_FORCE
+          scripts/config --file .config --disable CONFIG_UBSAN
+          scripts/config --file .config --disable CONFIG_UBSAN_SIGNED_WRAP
+          scripts/config --file .config --disable CONFIG_UBSAN_INTEGER_WRAP
+          
+          # 更新配置
           make ARCH=arm64 LLVM=1 olddefconfig
           
-          # 完整编译内核，生成符号表 (Module.symvers)
+          # 完整编译内核以生成 Module.symvers
           make ARCH=arm64 LLVM=1 -j$(nproc)
           
           cd ..
-          # 编译外部模块
+          # 编译我们的外部模块
           make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
 
       - name: Upload Artifact
