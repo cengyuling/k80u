@@ -14,21 +14,22 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # 基础编译工具
           sudo apt-get install -y git build-essential clang llvm lld clang-tools make bc flex bison libssl-dev libelf-dev cpio
 
       - name: Download Kernel Source (AOSP 6.6)
         run: |
-          # 使用 Android 通用源码，确保编译成功
           git clone --depth=1 -b android15-6.6 https://android.googlesource.com/kernel/common kernel_common
 
       - name: Build Module
         run: |
           cd kernel_common
           make ARCH=arm64 LLVM=1 gki_defconfig
-          make ARCH=arm64 LLVM=1 modules_prepare
+          
+          # 完整编译内核，生成 Module.symvers 符号表（这是解决 undefined 报错的关键）
+          make ARCH=arm64 LLVM=1 -j$(nproc)
+          
           cd ..
-          # 编译生成 overclock.ko
+          # 带着符号表编译我们的模块
           make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
 
       - name: Patch Vermagic (伪装内核版本号)
@@ -36,7 +37,7 @@ jobs:
           python3 -c "
           import sys
           
-          # 你手机的真实内核版本号 (从 uname -a 获取)
+          # 你的手机真实内核版本号
           target_ver = b'6.6.118-android15-8-gb9cc6ec16bc8-abogki536571621-4k'
           
           with open('overclock.ko', 'rb+') as f:
@@ -48,8 +49,8 @@ jobs:
                   old_ver = data[start:end]
                   print(f'Original vermagic: {old_ver.decode()}')
                   
+                  # 检查长度并替换
                   if len(target_ver) <= len(old_ver):
-                      # 长度不够用 \x00 补齐
                       new_ver = target_ver + b'\x00' * (len(old_ver) - len(target_ver))
                       f.seek(start)
                       f.write(new_ver)
