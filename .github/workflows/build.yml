@@ -14,7 +14,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git build-essential clang llvm lld clang-tools make bc flex bison libssl-dev libelf-dev cpio
+          sudo apt-get install -y git build-essential clang llvm lld clang-tools binutils make bc flex bison libssl-dev libelf-dev cpio libarchive-tools
 
       - name: Download Kernel Source (Klimt / MT6991)
         run: |
@@ -23,25 +23,23 @@ jobs:
       - name: Build Module
         run: |
           cd kernel_common
+          
+          # 1. 初始化配置
           make ARCH=arm64 LLVM=1 gki_defconfig
           
-          # 关闭一切可能导致报错的非必要安全/调试配置
+          # 2. 关闭容易导致 Action 环境崩溃的选项（禁用 kheaders 和 模块签名）
           scripts/config --file .config --disable CONFIG_IKHEADERS
           scripts/config --file .config --disable CONFIG_MODULE_SIG
-          scripts/config --file .config --disable CONFIG_MODULE_SIG_ALL
-          scripts/config --file .config --disable CONFIG_MODULE_SIG_FORCE
-          scripts/config --file .config --disable CONFIG_UBSAN
-          scripts/config --file .config --disable CONFIG_UBSAN_SIGNED_WRAP
-          scripts/config --file .config --disable CONFIG_UBSAN_INTEGER_WRAP
           
-          # 更新配置
+          # 3. 更新配置
           make ARCH=arm64 LLVM=1 olddefconfig
           
-          # 完整编译内核以生成 Module.symvers
-          make ARCH=arm64 LLVM=1 -j$(nproc)
+          # 4. 完整编译内核，生成 Module.symvers
+          # 使用 V=1 输出详细日志，限制 -j4 防止内存溢出
+          make ARCH=arm64 LLVM=1 V=1 -j4
           
           cd ..
-          # 编译我们的外部模块
+          # 5. 编译我们的模块
           make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
 
       - name: Upload Artifact
