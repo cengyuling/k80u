@@ -11,12 +11,27 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build Module with GKI Action
-        uses: dabao1955/kernel_build_action@main
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git build-essential clang lld make bc flex bison libssl-dev libelf-dev
+
+      - name: Download Kernel Source
+        run: |
+          git clone --depth=1 -b android15-6.6 https://android.googlesource.com/kernel/common kernel_common
+
+      - name: Build Module
+        run: |
+          cd kernel_common
+          # 直接使用官方目标的名称，不带路径前缀
+          make ARCH=arm64 LLVM=1 gki_defconfig
+          make ARCH=arm64 LLVM=1 modules_prepare
+          cd ..
+          # 退出到根目录，指定内核路径编译我们的 overclock.c
+          make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          kernel-url: 'https://android.googlesource.com/kernel/common'
-          branch: 'android15-6.6'
-          config: 'gki_defconfig'
-          arch: 'arm64'
-          android-version: 15
-          extra-cmd: 'make LLVM=1 M=$GITHUB_WORKSPACE modules'
+          name: overclock-ko
+          path: overclock.ko
