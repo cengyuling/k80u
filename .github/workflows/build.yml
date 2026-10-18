@@ -18,18 +18,15 @@ jobs:
 
       - name: Download Kernel Source (Android 15 / 6.6)
         run: |
-          # 拉取安卓通用的 6.6 内核头文件，用于编译模块
           git clone --depth=1 -b android15-6.6 https://android.googlesource.com/kernel/common kernel_common
-          
+
       - name: Build Module
         run: |
-          # 将你的代码和Makefile复制到内核目录
           cp Makefile overclock.c kernel_common/
           cd kernel_common
-          # 自动修改Makefile里的路径指向当前内核
           sed -i 's|KDIR := /lib/modules/$(shell uname -r)/build|KDIR := $(PWD)|' Makefile
-          # 生成配置并编译
-          make ARCH=arm64 LLVM=1 defconfig
+          make ARCH=arm64 LLVM=1 gki_defconfig
+          make ARCH=arm64 LLVM=1 modules_prepare
           make ARCH=arm64 LLVM=1 M=$PWD modules
 
       - name: Upload Artifact
