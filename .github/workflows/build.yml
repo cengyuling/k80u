@@ -16,6 +16,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git build-essential flex bison libssl-dev libelf-dev cpio libarchive-tools clang lld llvm
 
+      - name: Setup Swap Space (防内存溢出)
+        run: |
+          # 在云端创建 4GB 的虚拟内存，防止编译内核时 OOM (内存溢出)
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
       - name: Download Kernel Source (Klimt / MT6991)
         run: |
           git clone --depth=1 -b 17.0 https://github.com/iowaz/android_kernel_xiaomi_klimt kernel_common
@@ -23,24 +32,24 @@ jobs:
       - name: Build Module
         run: |
           cd kernel_common
+          
+          # 生成基础配置
           make ARCH=arm64 LLVM=1 gki_defconfig
           
-          # 禁用 kheaders 和模块签名
+          # 关闭导致崩溃和不需要的选项
           scripts/config --file .config --disable CONFIG_IKHEADERS
           scripts/config --file .config --disable CONFIG_MODULE_SIG
-          
-          # 核心修复：关闭 ThinLTO，彻底防止 llvm-ar 内存溢出导致的打包失败
           scripts/config --file .config --disable CONFIG_LTO_CLANG_THIN
           scripts/config --file .config --disable CONFIG_LTO_CLANG
           
           # 更新配置
           make ARCH=arm64 LLVM=1 olddefconfig
           
-          # 完整编译内核，限制并发数防内存溢出
-          make ARCH=arm64 LLVM=1 -j4
+          # 使用 -j2 (双线程) 进行编译，配合上面的 Swap，绝对不炸内存
+          make ARCH=arm64 LLVM=1 -j2
           
           cd ..
-          # 编译我们的超频模块
+          # 编译外部模块
           make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
 
       - name: Upload Artifact
