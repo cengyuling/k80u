@@ -1,3 +1,4 @@
+
 name: Build Kernel Module
 
 on:
@@ -14,22 +15,26 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git build-essential clang llvm lld clang-tools make bc flex bison libssl-dev libelf-dev
+          sudo apt-get install -y git build-essential clang llvm lld clang-tools make bc flex bison libssl-dev libelf-dev cpio
 
       - name: Download Kernel Source (Klimt / MT6991)
         run: |
-          # 这里使用第三方整理的小米15T Pro完整源码树
           git clone --depth=1 -b 17.0 https://github.com/iowaz/android_kernel_xiaomi_klimt kernel_common
 
       - name: Build Module
         run: |
           cd kernel_common
-          # MTK 平台通常需要先指定 defconfig，具体名称需根据源码确定，这里先尝试 gki_defconfig
           make ARCH=arm64 LLVM=1 gki_defconfig
-          # 完整编译内核，生成与 klimt 匹配的 Module.symvers 符号表
+          
+          # 禁用不需要的 kheaders 功能，防止 cpio 相关报错
+          scripts/config --file .config --disable CONFIG_IKHEADERS
+          make ARCH=arm64 LLVM=1 olddefconfig
+          
+          # 完整编译内核，生成符号表 (Module.symvers)
           make ARCH=arm64 LLVM=1 -j$(nproc)
+          
           cd ..
-          # 带着符号表编译我们的超频模块
+          # 编译外部模块
           make ARCH=arm64 LLVM=1 -C kernel_common M=$GITHUB_WORKSPACE modules
 
       - name: Upload Artifact
